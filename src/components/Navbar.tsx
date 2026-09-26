@@ -24,6 +24,7 @@ import {
   ChevronLeft
 } from 'lucide-react';
 import { MainTab, Settings } from '../types/pharmacy';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface NavbarProps {
   activeTab: MainTab;
@@ -171,6 +172,9 @@ export const Navbar: React.FC<NavbarProps> = ({
               {settings.enableScannerSound ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
             </button>
 
+            {/* PWA Install Button */}
+            <PWAInstallButton />
+
             {/* Quick Backup (hidden on small phone, available in More menu) */}
             <button
               onClick={onQuickBackup}
@@ -251,7 +255,11 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
 
             {/* Quick Action Tools in Drawer */}
-            <div className="p-3 bg-slate-50 dark:bg-slate-800/40 border-b border-slate-100 dark:border-slate-800 grid grid-cols-2 gap-2 text-xs">
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/40 border-b border-slate-100 dark:border-slate-800 space-y-2">
+              <div className="flex justify-center">
+                <PWAInstallButton />
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
               <button
                 onClick={onToggleSound}
                 className="flex items-center justify-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-bold text-slate-700 dark:text-slate-200 min-h-[44px]"
@@ -267,6 +275,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <Download className="w-4 h-4" />
                 <span>نسخ احتياطي JSON</span>
               </button>
+              </div>
             </div>
 
             {/* Categorized Nav Items List */}

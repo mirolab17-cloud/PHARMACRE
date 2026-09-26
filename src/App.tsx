@@ -18,6 +18,7 @@ import { SalesReturnsView } from './components/SalesReturnsView';
 import { BarcodeScannerModal } from './components/BarcodeScannerModal';
 import { ContinuousScannerWidget } from './components/ContinuousScannerWidget';
 import { ThermalReceipt } from './components/ThermalReceipt';
+import { OfflineIndicator } from './components/OfflineIndicator';
 
 import { pharmacyStorage } from './services/storage';
 import { 
@@ -491,6 +492,9 @@ export default function App() {
         }}
         soundEnabled={isSoundOn}
       />
+
+      {/* Connectivity & Offline Notification Banner */}
+      <OfflineIndicator />
     </div>
   );
 }
