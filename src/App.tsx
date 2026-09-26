@@ -36,10 +36,46 @@ import {
   Settings 
 } from './types/pharmacy';
 import { playBeep, playSuccess, playError } from './utils/audio';
+import { useHardwareBarcodeScanner } from './utils/useHardwareBarcodeScanner';
+
+const VALID_TABS: MainTab[] = [
+  'pos', 'sales_returns', 'purchases', 'purchase_returns', 
+  'products', 'banks', 'customers', 'suppliers', 
+  'invoices', 'vouchers', 'analytics', 'settings'
+];
+
+function getTabFromHash(): MainTab {
+  if (typeof window !== 'undefined' && window.location.hash) {
+    const raw = window.location.hash.replace(/^#\/?/, '').trim() as MainTab;
+    if (VALID_TABS.includes(raw)) {
+      return raw;
+    }
+  }
+  return 'pos';
+}
 
 export default function App() {
-  // Navigation
-  const [activeTab, setActiveTab] = useState<MainTab>('pos');
+  // Navigation with Hash URL support
+  const [activeTab, setActiveTab] = useState<MainTab>(() => getTabFromHash());
+
+  const handleSelectTab = (tab: MainTab) => {
+    setActiveTab(tab);
+    if (typeof window !== 'undefined') {
+      window.location.hash = `#/${tab}`;
+    }
+  };
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      const tab = getTabFromHash();
+      setActiveTab(tab);
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    if (!window.location.hash) {
+      window.location.hash = '#/pos';
+    }
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
 
   // Application Data State
   const [settings, setSettings] = useState<Settings>(() => pharmacyStorage.getSettings());
@@ -302,12 +338,25 @@ export default function App() {
     setIsScannerOpen(false);
   };
 
+  // Hardware Barcode Scanner Listener (USB / Bluetooth barcode gun)
+  useHardwareBarcodeScanner({
+    onScan: (barcode) => {
+      if (isSoundOn) playBeep();
+      if (scannedBarcodeTarget) {
+        scannedBarcodeTarget(barcode);
+      } else {
+        setScannedBarcode(barcode);
+      }
+    },
+    enabled: true,
+  });
+
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 transition-colors dark:bg-slate-950 dark:text-slate-100 font-sans pb-16 lg:pb-0" dir="rtl">
       {/* Top Navigation */}
       <Navbar
         activeTab={activeTab}
-        onSelectTab={setActiveTab}
+        onSelectTab={handleSelectTab}
         settings={settings}
         onToggleHideProfit={handleToggleMagicEye}
         onToggleSound={handleToggleSound}
@@ -391,7 +440,9 @@ export default function App() {
             onDeleteCategory={handleDeleteCategory}
             onSaveManufacturer={handleSaveManufacturer}
             onDeleteManufacturer={handleDeleteManufacturer}
-            onOpenScanner={() => openScanner()}
+            onOpenScanner={(cb) => openScanner(cb)}
+            scannedBarcode={scannedBarcode}
+            onClearScannedBarcode={() => setScannedBarcode(null)}
           />
         )}
 

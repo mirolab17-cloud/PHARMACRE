@@ -17,6 +17,7 @@
     <link rel="icon" type="image/svg+xml" href="icon.svg" />
     <link rel="alternate icon" href="favicon.ico" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <link rel="manifest" href="manifest.json" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -47,6 +48,19 @@
   </head>
   <body class="bg-slate-50 text-slate-900 antialiased select-none selection:bg-sky-100 selection:text-sky-900">
     <div id="root"></div>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+          navigator.serviceWorker.register('./sw.js', { scope: './' })
+            .then(function(reg) {
+              console.log('PharmaCare Service Worker Active:', reg.scope);
+            })
+            .catch(function(err) {
+              console.warn('Service Worker registration skipped:', err);
+            });
+        });
+      }
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

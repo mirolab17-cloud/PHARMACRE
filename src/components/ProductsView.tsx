@@ -46,7 +46,9 @@ interface ProductsViewProps {
   onDeleteCategory: (id: string) => void;
   onSaveManufacturer: (manufacturer: Manufacturer) => void;
   onDeleteManufacturer: (id: string) => void;
-  onOpenScanner: () => void;
+  onOpenScanner: (callback?: (barcode: string) => void) => void;
+  scannedBarcode?: string | null;
+  onClearScannedBarcode?: () => void;
 }
 
 type SubTab = 'all' | 'ingredients' | 'categories' | 'manufacturers';
@@ -66,6 +68,8 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
   onSaveManufacturer,
   onDeleteManufacturer,
   onOpenScanner,
+  scannedBarcode,
+  onClearScannedBarcode,
 }) => {
   const [currentSubTab, setCurrentSubTab] = useState<SubTab>('all');
 
@@ -112,21 +116,69 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
     status: 'update' | 'new';
   }>>([]);
 
-  // Listen to background continuous scanner global events
+  // Listen to background continuous & hardware scanner global events
+  const handleProductBarcodeScanned = React.useCallback((code: string) => {
+    const raw = code.trim();
+    if (!raw) return;
+
+    if (isProductModalOpen) {
+      setBarcode(raw);
+    } else {
+      // Find matching product
+      const rawLower = raw.toLowerCase();
+      const cleanNumeric = raw.replace(/^0+/, '');
+      const existing = products.find(p => {
+        const pCode = (p.barcode || '').trim().toLowerCase();
+        const pClean = pCode.replace(/^0+/, '');
+        return pCode === rawLower || (cleanNumeric.length > 0 && pClean === cleanNumeric);
+      });
+
+      if (existing) {
+        // Open directly for editing price / stock / units!
+        handleOpenEditProduct(existing);
+      } else {
+        // Open Add Medicine modal with this barcode ready
+        setEditingProduct(null);
+        setProdType('medicine');
+        setNameAr('');
+        setNameEn('');
+        setBarcode(raw);
+        setCategoryId(categories.find(c => c.type !== 'commercial')?.id || categories[0]?.id || '');
+        setManufacturerId(manufacturers[0]?.id || '');
+        setStock(100);
+        setMinStock(10);
+        setNotes('');
+        setSelectedIngIds([]);
+        setUnits([
+          { id: 'u-1', name: 'حبة', factor: 1, salePrice: 1.0, costPrice: 0.5, wholesalePrice: 0.8 },
+          { id: 'u-2', name: 'شريط', factor: 10, salePrice: 9.0, costPrice: 4.5, wholesalePrice: 7.5 },
+          { id: 'u-3', name: 'علبة (20 حبة)', factor: 20, salePrice: 17.0, costPrice: 8.5, wholesalePrice: 14.5 },
+        ]);
+        setIsProductModalOpen(true);
+      }
+    }
+  }, [isProductModalOpen, products, categories, manufacturers]);
+
   React.useEffect(() => {
     const handleGlobalScan = (e: Event) => {
       const customEvent = e as CustomEvent<{ barcode: string }>;
       if (customEvent.detail?.barcode) {
-        if (isProductModalOpen) {
-          setBarcode(customEvent.detail.barcode);
-        } else {
-          setSearchTerm(customEvent.detail.barcode);
-        }
+        handleProductBarcodeScanned(customEvent.detail.barcode);
       }
     };
     window.addEventListener('pharmacy:barcode-scanned', handleGlobalScan);
     return () => window.removeEventListener('pharmacy:barcode-scanned', handleGlobalScan);
-  }, [isProductModalOpen]);
+  }, [handleProductBarcodeScanned]);
+
+  // Handle scannedBarcode prop if passed from parent
+  React.useEffect(() => {
+    if (scannedBarcode) {
+      handleProductBarcodeScanned(scannedBarcode);
+      if (onClearScannedBarcode) {
+        onClearScannedBarcode();
+      }
+    }
+  }, [scannedBarcode, handleProductBarcodeScanned, onClearScannedBarcode]);
 
   // Quick Inline Modals
   const [isQuickCategoryOpen, setIsQuickCategoryOpen] = useState(false);
@@ -567,7 +619,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
           {/* Multi-Filters Bar */}
           <div className="rounded-2xl bg-white p-3 sm:p-4 shadow-xs border border-slate-200 dark:bg-slate-900 dark:border-slate-800 space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
-              {/* Search text */}
+              {/* Search text with Camera Scan button */}
               <div className="relative">
                 <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <input
@@ -575,8 +627,16 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="ابحث بالاسم أو الباركود..."
-                  className="w-full rounded-xl border border-slate-300 bg-slate-50 py-2 pr-9 pl-3 text-xs focus:border-sky-500 focus:bg-white focus:outline-hidden dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  className="w-full rounded-xl border border-slate-300 bg-slate-50 py-2 pr-9 pl-9 text-xs focus:border-sky-500 focus:bg-white focus:outline-hidden dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                 />
+                <button
+                  type="button"
+                  onClick={() => onOpenScanner((scanned) => setSearchTerm(scanned.trim()))}
+                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-sky-600 p-0.5 rounded transition"
+                  title="مسح باركود للبحث"
+                >
+                  <Camera className="w-3.5 h-3.5" />
+                </button>
               </div>
 
               {/* Category Filter */}
@@ -1250,8 +1310,8 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                   />
                   <button
                     type="button"
-                    onClick={onOpenScanner}
-                    className="flex items-center gap-1 rounded-xl bg-sky-600 px-3 py-2 text-xs font-bold text-white hover:bg-sky-700"
+                    onClick={() => onOpenScanner((scanned) => setBarcode(scanned.trim()))}
+                    className="flex items-center gap-1 rounded-xl bg-sky-600 px-3 py-2 text-xs font-bold text-white hover:bg-sky-700 active:scale-95 transition"
                     title="مسح بالكاميرا"
                   >
                     <Camera className="h-4 w-4" />

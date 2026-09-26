@@ -14,6 +14,7 @@ import {
   StockMovement 
 } from '../types/pharmacy';
 import { recalculateUnitHierarchyPrices } from '../utils/unitsHelper';
+import { firebaseSync } from './firebaseSync';
 
 const STORAGE_KEYS = {
   SETTINGS: 'pharmacare_settings',
@@ -252,9 +253,9 @@ const INITIAL_BANKS: Bank[] = [
 
 // العملاء
 const INITIAL_CUSTOMERS: Customer[] = [
-  { id: 'cust-1', name: 'أحمد خليل النجار', phone: '059-9234567', address: 'رام الله - عين مصباح', balance: 85.0, notes: 'عميل منتظم - رصيد آجل سابق', createdAt: new Date().toISOString() },
-  { id: 'cust-2', name: 'د. مريم عبد الله', phone: '056-8123890', address: 'البيرة - حي الجنان', balance: 0.0, notes: 'طبيبة أطفال', createdAt: new Date().toISOString() },
-  { id: 'cust-3', name: 'خالد سليم مصطفى', phone: '059-8765432', address: 'رام الله - الماصيون', balance: 40.0, notes: 'أدوية ضغط شهرية', createdAt: new Date().toISOString() },
+  { id: 'cust-1', name: 'أحمد خليل النجار', phone: '059-9234567', address: 'رام الله - عين مصباح', balance: 85.0, creditLimit: 250.0, maxDebtDays: 30, notes: 'عميل منتظم - رصيد آجل سابق', createdAt: new Date().toISOString() },
+  { id: 'cust-2', name: 'د. مريم عبد الله', phone: '056-8123890', address: 'البيرة - حي الجنان', balance: 0.0, creditLimit: 500.0, maxDebtDays: 45, notes: 'طبيبة أطفال', createdAt: new Date().toISOString() },
+  { id: 'cust-3', name: 'خالد سليم مصطفى', phone: '059-8765432', address: 'رام الله - الماصيون', balance: 40.0, creditLimit: 150.0, maxDebtDays: 20, notes: 'أدوية ضغط شهرية', createdAt: new Date().toISOString() },
 ];
 
 // الموردون
@@ -329,8 +330,28 @@ class PharmacyStorageService {
       this.setItem(STORAGE_KEYS.STOCK_MOVEMENTS, []);
       localStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
     }
-    // حاول المزامنة مع Cloud SQL
+    // حاول المزامنة مع Cloud SQL و Firestore
     this.syncWithCloudSQL();
+    this.syncWithFirestore();
+  }
+
+  async syncWithFirestore(): Promise<boolean> {
+    try {
+      if (!navigator.onLine) return false;
+      const cloudProds = await firebaseSync.pullCollection<Product>('products');
+      if (cloudProds && cloudProds.length > 0) {
+        const local = this.getProducts();
+        const map = new Map<string, Product>();
+        cloudProds.forEach(p => map.set(p.id, p));
+        local.forEach(p => {
+          if (!map.has(p.id)) map.set(p.id, p);
+        });
+        this.setItem(STORAGE_KEYS.PRODUCTS, Array.from(map.values()));
+      }
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   // الإعدادات
@@ -340,6 +361,7 @@ class PharmacyStorageService {
 
   saveSettings(settings: Settings): void {
     this.setItem(STORAGE_KEYS.SETTINGS, settings);
+    firebaseSync.enqueue('settings', 'current', settings);
     fetch('/api/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -446,6 +468,7 @@ class PharmacyStorageService {
       list.unshift(updatedProduct);
     }
     this.setItem(STORAGE_KEYS.PRODUCTS, list);
+    firebaseSync.enqueue('products', updatedProduct.id, updatedProduct);
 
     // Sync to PostgreSQL backend
     fetch('/api/products', {
@@ -458,6 +481,7 @@ class PharmacyStorageService {
   deleteProduct(id: string): void {
     const list = this.getProducts().filter(p => p.id !== id);
     this.setItem(STORAGE_KEYS.PRODUCTS, list);
+    firebaseSync.enqueue('products', id, null, 'delete');
     fetch(`/api/products/${id}`, { method: 'DELETE' }).catch(() => {});
   }
 
@@ -536,6 +560,7 @@ class PharmacyStorageService {
     if (index >= 0) list[index] = customer;
     else list.push(customer);
     this.setItem(STORAGE_KEYS.CUSTOMERS, list);
+    firebaseSync.enqueue('customers', customer.id, customer);
 
     fetch('/api/customers', {
       method: 'POST',
@@ -547,6 +572,7 @@ class PharmacyStorageService {
   deleteCustomer(id: string): void {
     const list = this.getCustomers().filter(c => c.id !== id);
     this.setItem(STORAGE_KEYS.CUSTOMERS, list);
+    firebaseSync.enqueue('customers', id, null, 'delete');
   }
 
   // الموردون
@@ -560,6 +586,7 @@ class PharmacyStorageService {
     if (index >= 0) list[index] = supplier;
     else list.push(supplier);
     this.setItem(STORAGE_KEYS.SUPPLIERS, list);
+    firebaseSync.enqueue('suppliers', supplier.id, supplier);
 
     fetch('/api/suppliers', {
       method: 'POST',
@@ -651,6 +678,7 @@ class PharmacyStorageService {
     this.setItem(STORAGE_KEYS.PRODUCTS, products);
     this.setItem(STORAGE_KEYS.STOCK_MOVEMENTS, movements);
     this.setItem(STORAGE_KEYS.INVOICES, invoices);
+    firebaseSync.enqueue('invoices', invoice.id, invoice);
 
     // Sync to PostgreSQL backend
     fetch('/api/invoices', {
@@ -827,6 +855,7 @@ class PharmacyStorageService {
     this.setItem(STORAGE_KEYS.PRODUCTS, products);
     this.setItem(STORAGE_KEYS.STOCK_MOVEMENTS, movements);
     this.setItem(STORAGE_KEYS.PURCHASES, purchases);
+    firebaseSync.enqueue('purchases', purchase.id, purchase);
 
     // Sync to PostgreSQL backend
     fetch('/api/purchases', {

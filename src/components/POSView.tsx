@@ -13,6 +13,7 @@ import {
   UserCheck, 
   Sparkles, 
   AlertTriangle, 
+  AlertCircle,
   Layers, 
   CheckCircle2, 
   X, 
@@ -101,6 +102,19 @@ export const POSView: React.FC<POSViewProps> = ({
   const [isAltModalOpen, setIsAltModalOpen] = useState(false);
   const [altTargetIndex, setAltTargetIndex] = useState<number | null>(null); // if replacing from cart row
 
+  // Barcode Scanning Toast / Feedback
+  const [scanFeedback, setScanFeedback] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (scanFeedback) {
+      const timer = setTimeout(() => setScanFeedback(null), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [scanFeedback]);
+
   // Drug Interactions Alert
   const drugInteractions = useMemo(() => {
     return checkCartDrugInteractions(cartItems, products, ingredients);
@@ -166,17 +180,64 @@ export const POSView: React.FC<POSViewProps> = ({
 
   // Barcode or text auto-match
   const handleBarcodeScanned = (code: string) => {
-    const trimmed = code.trim().toLowerCase();
-    const match = products.find(p => p.barcode.toLowerCase() === trimmed);
+    const raw = code.trim();
+    if (!raw) return;
+    const trimmed = raw.toLowerCase();
+    const cleanNumeric = raw.replace(/^0+/, '');
+
+    // 1. Search products by barcode
+    let match = products.find(p => {
+      const pCode = (p.barcode || '').trim().toLowerCase();
+      const pClean = pCode.replace(/^0+/, '');
+      return pCode === trimmed || (cleanNumeric.length > 0 && pClean === cleanNumeric);
+    });
+
+    let targetUnitIndex = 0;
+
+    // 2. If not matched on product barcode, check unit barcodes
+    if (!match) {
+      for (const p of products) {
+        const uIdx = p.units.findIndex(u => {
+          const uCode = ((u as { barcode?: string }).barcode || '').trim().toLowerCase();
+          const uClean = uCode.replace(/^0+/, '');
+          return uCode === trimmed || (cleanNumeric.length > 0 && uClean === cleanNumeric);
+        });
+        if (uIdx !== -1) {
+          match = p;
+          targetUnitIndex = uIdx;
+          break;
+        }
+      }
+    }
+
     if (match) {
+      // Pick packaging unit (default to box/pack or matched unit)
+      if (targetUnitIndex === 0 && match.units.length > 1) {
+        targetUnitIndex = match.units.length - 1;
+      }
       handleSelectProduct(match);
-      // Automatically add 1 of default unit if barcode matches directly
-      addItemToCart(match, 0, 1);
+      setSelectedUnitIndex(targetUnitIndex);
+      // Automatically add 1 unit to cart directly according to database
+      addItemToCart(match, targetUnitIndex, 1);
+
+      if (settings.enableScannerSound) {
+        sounds.playScanBeep();
+      }
+
+      setScanFeedback({
+        type: 'success',
+        message: `تمت إضافة (${match.nameAr}) إلى السلة تلقائياً بنجاح`,
+      });
     } else {
-      setSearchQuery(code);
+      // DO NOT put barcode in search query! Keep search clean as requested.
       if (settings.enableScannerSound) {
         sounds.playWarning();
       }
+
+      setScanFeedback({
+        type: 'error',
+        message: `الصنف غير موجود في قاعدة البيانات: (${raw})`,
+      });
     }
   };
 
@@ -506,6 +567,32 @@ export const POSView: React.FC<POSViewProps> = ({
             <span>مسح باركود 📷</span>
           </button>
         </div>
+
+        {/* Real-time Barcode Scan Notification */}
+        {scanFeedback && (
+          <div
+            className={`mt-3 flex items-center justify-between p-3 rounded-xl text-xs font-bold transition-all shadow-xs ${
+              scanFeedback.type === 'success'
+                ? 'bg-emerald-50 text-emerald-800 border border-emerald-300 dark:bg-emerald-950/70 dark:text-emerald-200 dark:border-emerald-800'
+                : 'bg-rose-50 text-rose-800 border border-rose-300 dark:bg-rose-950/70 dark:text-rose-200 dark:border-rose-800'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              {scanFeedback.type === 'success' ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              ) : (
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              )}
+              <span className="text-sm">{scanFeedback.message}</span>
+            </div>
+            <button
+              onClick={() => setScanFeedback(null)}
+              className="p-1 rounded-md hover:bg-black/5 dark:hover:bg-white/10"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
 
         {/* Live Search Results Dropdown/Grid */}
         {filteredProducts.length > 0 && (

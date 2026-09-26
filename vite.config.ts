@@ -1,15 +1,15 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig} from 'vite';
-import {VitePWA} from 'vite-plugin-pwa';
+import { defineConfig } from 'vite';
 
-export default defineConfig(() => {
-  return {
-    base: './',
-    plugins: [
-      react(),
-      tailwindcss(),
+export default defineConfig(async ({ command }) => {
+  const plugins = [react(), tailwindcss()];
+
+  // Only load VitePWA during production build so dev middleware loads cleanly without CJS loader errors
+  if (command === 'build') {
+    const { VitePWA } = await import('vite-plugin-pwa');
+    plugins.push(
       VitePWA({
         registerType: 'autoUpdate',
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'icon.svg'],
@@ -80,12 +80,13 @@ export default defineConfig(() => {
             },
           ],
         },
-        devOptions: {
-          enabled: true,
-          type: 'module',
-        },
-      }),
-    ],
+      })
+    );
+  }
+
+  return {
+    base: './',
+    plugins,
     resolve: {
       alias: {
         '@': path.resolve('.'),

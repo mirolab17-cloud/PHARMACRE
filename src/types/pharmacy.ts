@@ -18,6 +18,9 @@ export interface Settings {
   receiptFooterMessage: string;
   receiptFooter?: string;
   thermalPaperWidth?: '58mm' | '80mm';
+  googleDriveBackupEnabled?: boolean;
+  lastCloudSync?: string;
+  customerDisplayEnabled?: boolean;
 }
 
 export interface Ingredient {
@@ -105,6 +108,9 @@ export interface Customer {
   phone: string;
   address?: string;
   balance: number; // الرصيد الحالي (الموجب يعني عليه مديونية)
+  creditLimit?: number; // الحد الائتماني الأقصى المسموح به للدين
+  maxDebtDays?: number; // فترة السماح بالأيام
+  nationalId?: string; // رقم الهوية الوطنية
   notes?: string;
   createdAt: string;
 }
